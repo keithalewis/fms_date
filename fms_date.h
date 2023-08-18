@@ -4,25 +4,51 @@
 
 namespace fms::date {
 
+	// Calendar date.
 	using ymd = std::chrono::year_month_day;
-	
-	// convert ymd to sys_days time point
+	constexpr ymd make_ymd(int y, int m, int d)
+	{
+		return std::chrono::year_month_day(std::chrono::year(y), std::chrono::month(m), std::chrono::day(d));
+	}
+
+
+	// Convert ymd to sys_days time point using a clock.
 	using days = std::chrono::sys_days;
-	
+	constexpr days make_days(int y, int m, int d)
+	{
+		return days(make_ymd(y, m, d));
+	}
+
 	// duration as double in years
 	using years = std::chrono::duration<double, std::chrono::years::period>;
 
-	// Duration in years from d0 to d1.
+	// d0 - d1 in years
+	constexpr years minus_years(const ymd& d0, const ymd& d1)
+	{
+		return years(days(d0) - days(d1));
+	}
+#ifdef _DEBUG
+	constexpr int basic_date_test()
+	{
+		{
+			constexpr auto d0 = make_days(2023, 4, 5);
+			constexpr auto d1 = make_days(2024, 4, 5);
+			constexpr auto dd = minus_years(d0, d1);
+			static_assert(d1 + dd == d0);
+			static_assert(d0 - dd == d1);
+		}
+
+		return 0;
+	}
+#endif // _DEBUG
+	
+	// Day count fraction in years from d0 to d1.
 	constexpr years dcf_years(const ymd& d0, const ymd& d1)
 	{
-		return years(days(d1) - days(d0));
+		return minus_years(d1, d0);
 	}
+	// dcf_30_360, ...
 
-	// 
-	constexpr auto add_years(const ymd& d, const years& y)
-	{
-		return days(d) + y;
-	}
 
 	constexpr bool is_weekday(const ymd& d)
 	{
@@ -52,12 +78,40 @@ namespace fms::date {
 
 	} // namespace holiday
 
+	namespace calendars {
+
+		constexpr bool weekday(const ymd& d)
+		{
+			return !is_weekday(d);
+		}
+		constexpr bool example(const ymd& d)
+		{
+			return weekday(d) or holiday::new_year_day(d);
+		}
+
+	} // namespace calendars
+
+	using calendar = bool(*)(const ymd&);
+
+	// Business day rolling conventions.
 	enum class roll {
 		none,
 		previous, // previous business day
 		following, // following business day
 		modified_following, // following business day unless different month
 	};
+
+	constexpr ymd adjust(const days& date, roll convention, const calendar& cal = calendars::weekday)
+	{
+		switch (convention) {
+		case roll::none:
+			return date;
+		case roll::previous:
+			if (cal(date)) {
+				return adjust(date - std::chrono::days(1), convention, cal);
+			}
+		}
+	}
 
 	enum class frequency {
 		annually = 1,

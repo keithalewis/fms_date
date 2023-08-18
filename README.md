@@ -4,7 +4,36 @@ There are various standards for expressing
 [dates and times](https://www.ipses.com/eng/in-depth-analysis/standard-of-time-definition/).
 For financial events we use _Coordinated Universal Time_, also know as UTC.
 Why is it not called CUT? As with most date and time related issues there
-is a reason, but the details are rarely important.
+is a reason, but the details are rarely consequential.
+
+This library provides utilities related to financial calculations.
+It is completely compatible with and extends the C++ 
+[`<chrono>`](https://en.cppreference.com/w/cpp/chrono)
+library. Library functions use 
+[`std::chrono::time_point`](https://en.cppreference.com/w/cpp/chrono/time_point)
+and 
+[`std::chrono::duration`](https://en.cppreference.com/w/cpp/chrono/duration)
+so you should learn about those first. See ... for an introduction.
+
+Unlike `<chrono>`, this library provides many functions that take two time points and return a duration.
+We are
+```C++
+using ...
+```
+as the default duration for analytical functions. It is the duration in years represented by a `double`.
+
+
+
+
+Periodic events depend on a _effective_ and _termination_ pair of time points,
+and a positive duration called the _period_.
+<!--
+The most important
+thing is a consistent method to convert a pair of times to a duration,
+and that the duration can be used to recover one element of the time pair given the other.
+-->
+
+## T...
 
 A _time point_ is an absolute point in time. 
 A _duration_ is a difference between two time points.

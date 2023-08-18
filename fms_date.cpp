@@ -4,6 +4,7 @@
 using namespace std::literals;
 using namespace fms::date;
 
+int test_basic_date = fms::date::basic_date_test();
 int test_date = fms::date::test();
 periodic<> p;
 periodic_iterable pi(p);

@@ -78,17 +78,35 @@ namespace fms::date {
 	class periodic_iterable {
 		periodic<Clock, Duration> i;
 		std::chrono::time_point<Clock, Duration> current;
+		// order and direction of period are compatible
+		constexpr bool valid() const
+		{
+			if (i.effective == i.termination) {
+				return i.period.count() == 0;
+			}
+
+			return (i.effective < i.termination) xor (i.period.count() > 0);
+		}
 	public:
 		using value_type = std::chrono::time_point<Clock, Duration>;
 
+		// Work backward from termination.
 		constexpr periodic_iterable(const periodic<Clock, Duration>& i)
 			: i{ i }, current{ i.termination }
 		{
-			// Work backward to find starting calculation time
-			while (current - i.period >= i.effective) {
-				current -= i.period;
+			if (valid()) {
+				while (current > i.effective) {
+					auto current_ = current - i.period;
+					if (current_ > i.effective) {
+						current = current_;
+					}
+				}
 			}
 		}
+		constexpr periodic_iterable(const periodic_iterable&) = default;
+		constexpr periodic_iterable& operator=(const periodic_iterable&) = default;
+		constexpr ~periodic_iterable() = default;
+
 		constexpr bool operator==(const periodic_iterable&) const = default;
 
 		constexpr auto begin() const
@@ -125,7 +143,10 @@ namespace fms::date {
 				constexpr auto ter = year(2025) / 1 / 2;
 				constexpr periodic<> p = { days(eff), days(ter), std::chrono::years(1) };
 				constexpr auto pi = periodic_iterable(p);
-				static_assert(pi);
+				//static_assert(pi);
+				//constexpr periodic_iterable pi2{ pi };
+				//static_assert(pi2 == pi);
+				//static_assert(days(eff) == *pi);
 			}
 
 			return 0;

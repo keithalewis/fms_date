@@ -18,20 +18,20 @@ so you should learn about those first. See ... for an introduction.
 Unlike `<chrono>`, this library provides many functions that take two time points and return a duration.
 We are
 ```C++
-using ...
+using years = std::chrono::duration<double, std::chrono::years::period>;
 ```
 It is the duration in years represented by a `double`.
-A function with prefix `dcf_` compute day count fractions.
-It is always approximately equal to the deration in years.
+Functions with prefix `dcf_` compute day count fractions approximately equal to the duration in years.
+These use market conventions for computing coupon payments.
 Many of these are based on `minus_years` that subtracts time points.
 
 Periodic events depend on an _effective_ and _termination_ pair of time points,
-and a positive duration called the _period_. Note temination might
+and a duration called the _period_. Note temination might
 not equal effective plus an integral multiple of periods. We use
-the market convention of  
+the market convention of working back from termination in period steps.
+The first `period_iterable` is greater or equal to effective.
+The last `period_iterable` is always equal to termination.
 
-
-## T...
 
 A _time point_ is an absolute point in time. 
 A _duration_ is a difference between two time points.

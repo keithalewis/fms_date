@@ -1,6 +1,7 @@
 // fms_date.h - Date and time calculation
 #pragma once
 #include <chrono>
+#include <iterator>
 
 namespace fms::date {
 
@@ -141,6 +142,7 @@ namespace fms::date {
 			}
 		}
 	public:
+		using iterator_category = std::forward_iterator_tag;
 		using value_type = ymd;
 
 		// Work backward from termination.
@@ -200,8 +202,7 @@ namespace fms::date {
 				constexpr auto eff = year(2023) / 1 / 2;
 				constexpr auto ter = year(2025) / 1 / 2;
 				constexpr periodic_iterable pi(eff, ter, std::chrono::years(1));
-				static_assert(pi);
-				
+				static_assert(pi);				
 				//constexpr auto pi2{ pi };
 				//static_assert(pi2 == pi);
 				//pi = pi2;
@@ -212,6 +213,7 @@ namespace fms::date {
 				assert(pi_);
 				assert(eff == *pi_);
 				++pi_;
+				assert(pi_);
 				++pi_;
 				assert(ter == *pi_);
 				++pi_;

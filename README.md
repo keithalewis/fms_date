@@ -20,18 +20,16 @@ We are
 ```C++
 using ...
 ```
-as the default duration for analytical functions. It is the duration in years represented by a `double`.
+It is the duration in years represented by a `double`.
+A function with prefix `dcf_` compute day count fractions.
+It is always approximately equal to the deration in years.
+Many of these are based on `minus_years` that subtracts time points.
 
+Periodic events depend on an _effective_ and _termination_ pair of time points,
+and a positive duration called the _period_. Note temination might
+not equal effective plus an integral multiple of periods. We use
+the market convention of  
 
-
-
-Periodic events depend on a _effective_ and _termination_ pair of time points,
-and a positive duration called the _period_.
-<!--
-The most important
-thing is a consistent method to convert a pair of times to a duration,
-and that the duration can be used to recover one element of the time pair given the other.
--->
 
 ## T...
 

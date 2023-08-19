@@ -49,14 +49,6 @@ namespace fms::date {
 	}
 	// dcf_30_360, ...
 
-
-	constexpr bool is_weekday(const ymd& d)
-	{
-		auto w = std::chrono::year_month_weekday(d);
-		auto wd = w.weekday();
-
-		return (wd != std::chrono::Saturday) and (wd != std::chrono::Sunday);
-	}
 	
 	namespace holiday {
 
@@ -71,6 +63,8 @@ namespace fms::date {
 			return month_day(d, std::chrono::January, std::chrono::day(1));
 		}
 
+		// ...
+
 		constexpr bool christmas_day(const ymd& d)
 		{
 			return month_day(d, std::chrono::December, std::chrono::day(25));
@@ -82,7 +76,10 @@ namespace fms::date {
 
 		constexpr bool weekday(const ymd& d)
 		{
-			return !is_weekday(d);
+				auto w = std::chrono::year_month_weekday(d);
+				auto wd = w.weekday();
+
+				return (wd == std::chrono::Saturday) or (wd == std::chrono::Sunday);
 		}
 		constexpr bool example(const ymd& d)
 		{
@@ -101,16 +98,25 @@ namespace fms::date {
 		modified_following, // following business day unless different month
 	};
 
-	constexpr ymd adjust(const days& date, roll convention, const calendar& cal = calendars::weekday)
+	constexpr ymd adjust(const ymd& date, roll convention, const calendar& cal = calendars::weekday)
 	{
-		switch (convention) {
-		case roll::none:
-			return date;
-		case roll::previous:
-			if (cal(date)) {
-				return adjust(date - std::chrono::days(1), convention, cal);
-			}
+		if (convention == roll::previous) {
+			return !cal(date) ? date : adjust(days(date) - std::chrono::days(1), convention, cal);
 		}
+		if (convention == roll::following) {
+			return !cal(date) ? date : adjust(days(date) + std::chrono::days(1), convention, cal);
+		}
+		if (convention == roll::modified_following) {
+			if (!cal(date)) {
+				return date;
+			}
+			auto date_ = adjust(days(date) + std::chrono::days(1), roll::following, cal);
+			return date_.month() == date.month()
+				? date	
+				: adjust(date, roll::previous, cal);
+		}
+
+		return date;
 	}
 
 	enum class frequency {
@@ -121,40 +127,37 @@ namespace fms::date {
 		weekly = 52,
 	};
 
-	// Work backwards from termination to effective in duration steps of period
-	template<class Clock = std::chrono::system_clock, class Duration = std::chrono::system_clock::duration>
-	struct periodic {
-		std::chrono::time_point<Clock, Duration> effective, termination;
-		Duration period;
-	};
-
-	template<class Clock, class Duration>
+	// Work backwards from termination to effective in steps of period
+	template<class Clock = std::chrono::system_clock, class Duration = typename Clock::duration,
+		class time_point = std::chrono::time_point<Clock, Duration>>
 	class periodic_iterable {
-		periodic<Clock, Duration> i;
-		std::chrono::time_point<Clock, Duration> current;
+		time_point effective, termination, current; // use time points
+		Duration duration;
+
 		// order and direction of period are compatible
 		constexpr bool valid() const
 		{
-			if (i.effective == i.termination) {
-				return i.period.count() == 0;
+			if (effective == termination) {
+				return duration.count() == 0;
 			}
 
-			return (i.effective < i.termination) xor (i.period.count() > 0);
+			return (effective < termination) == (duration.count() > 0);
+		}
+		constexpr void reset()
+		{
+			while (current - duration > effective) {
+				current = current - duration;
+			}
 		}
 	public:
-		using value_type = std::chrono::time_point<Clock, Duration>;
+		using value_type = ymd;
 
 		// Work backward from termination.
-		constexpr periodic_iterable(const periodic<Clock, Duration>& i)
-			: i{ i }, current{ i.termination }
+		constexpr periodic_iterable(const ymd& effective, const ymd& termination, const Duration& duration)
+			: effective{ days(effective) }, termination{ days(termination) }, current{ days(termination) }, duration{ duration }
 		{
 			if (valid()) {
-				while (current > i.effective) {
-					auto current_ = current - i.period;
-					if (current_ > i.effective) {
-						current = current_;
-					}
-				}
+				reset();
 			}
 		}
 		constexpr periodic_iterable(const periodic_iterable&) = default;
@@ -169,24 +172,24 @@ namespace fms::date {
 		}
 		constexpr auto end() const
 		{
-			return periodic_iterable(periodic(i.termination, i.termination, i.period));
+			return periodic_iterable(termination, termination, duration);
 		}
 
 		constexpr explicit operator bool() const
 		{
-			return current != i.termination;
+			return current <= termination;
 		}
 		constexpr value_type operator*() const
 		{
-			return current;
+			return value_type{floor<std::chrono::days>(current) };
 		}
 		constexpr periodic_iterable& operator++()
 		{
 			if (*this) {
-				current += i.period;
+				current += duration;
 			}
 
-			return this;
+			return *this;
 		}
 #ifdef _DEBUG
 		static int test()
@@ -195,12 +198,23 @@ namespace fms::date {
 			{
 				constexpr auto eff = year(2023) / 1 / 2;
 				constexpr auto ter = year(2025) / 1 / 2;
-				constexpr periodic<> p = { days(eff), days(ter), std::chrono::years(1) };
-				constexpr auto pi = periodic_iterable(p);
-				//static_assert(pi);
-				//constexpr periodic_iterable pi2{ pi };
+				constexpr periodic_iterable pi(eff, ter, std::chrono::years(1));
+				static_assert(pi);
+				
+				//constexpr auto pi2{ pi };
 				//static_assert(pi2 == pi);
-				//static_assert(days(eff) == *pi);
+				//pi = pi2;
+				//static_assert(!(pi != pi2));
+				static_assert(eff == *pi);
+
+				periodic_iterable pi_{ pi };
+				assert(pi_);
+				assert(eff == *pi_);
+				++pi_;
+				++pi_;
+				assert(ter == *pi_);
+				++pi_;
+				assert(!pi_);
 			}
 
 			return 0;

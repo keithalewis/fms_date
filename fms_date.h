@@ -134,15 +134,6 @@ namespace fms::date {
 		time_point effective, termination, current; // use time points
 		Duration duration;
 
-		// order and direction of period are compatible
-		constexpr bool valid() const
-		{
-			if (effective == termination) {
-				return duration.count() == 0;
-			}
-
-			return (effective < termination) == (duration.count() > 0);
-		}
 		constexpr void reset()
 		{
 			while (current - duration > effective) {
@@ -164,6 +155,16 @@ namespace fms::date {
 		constexpr periodic_iterable& operator=(const periodic_iterable&) = default;
 		constexpr ~periodic_iterable() = default;
 
+		// order and direction of period are compatible
+		constexpr bool valid() const
+		{
+			if (effective == termination) {
+				return duration.count() == 0;
+			}
+
+			return (effective < termination) == (duration.count() > 0);
+		}
+
 		constexpr bool operator==(const periodic_iterable&) const = default;
 
 		constexpr auto begin() const
@@ -172,7 +173,7 @@ namespace fms::date {
 		}
 		constexpr auto end() const
 		{
-			return periodic_iterable(termination, termination, duration);
+			periodic_iterable e(termination, termination, duration);
 		}
 
 		constexpr explicit operator bool() const
@@ -227,7 +228,7 @@ namespace fms::date {
 	{
 		using year = std::chrono::year;
 		using days = std::chrono::sys_days;
-		using seconds = std::chrono::seconds;
+		//using seconds = std::chrono::seconds;
 		{
 			constexpr auto d0 = year{ 2023 } / 1 / 1;
 			constexpr auto d1 = year{ 2023 } / 1 / 2;

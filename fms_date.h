@@ -9,11 +9,10 @@ namespace fms::date {
 	using ymd = std::chrono::year_month_day;
 	constexpr ymd make_ymd(int y, int m, int d)
 	{
-		return std::chrono::year_month_day(std::chrono::year(y), std::chrono::month(m), std::chrono::day(d));
+		return ymd(std::chrono::year(y), std::chrono::month(m), std::chrono::day(d));
 	}
 
-
-	// Convert ymd to sys_days time point using a clock.
+	// Convert ymd to sys_days time point using the system clock.
 	using days = std::chrono::sys_days;
 	constexpr days make_days(int y, int m, int d)
 	{

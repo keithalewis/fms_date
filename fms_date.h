@@ -2,6 +2,7 @@
 #pragma once
 #include <chrono>
 #include <iterator>
+#include <span>
 
 namespace fms::date {
 
@@ -13,21 +14,27 @@ namespace fms::date {
 	}
 
 
-	// Convert ymd to sys_days time point using a clock.
+	// Construct sys_days time point from ymd.
 	using days = std::chrono::sys_days;
 	constexpr days make_days(int y, int m, int d)
 	{
+		// ymd has operator operator sys_days conversion
 		return days(make_ymd(y, m, d));
 	}
 
 	// duration as double in years
 	using years = std::chrono::duration<double, std::chrono::years::period>;
 
-	// d0 - d1 in years
+	// d0 - d1 in years. If t = d0 - d1 then d1 = d0 - t and d0 = d1 + t
 	constexpr years minus_years(const ymd& d0, const ymd& d1)
 	{
 		return years(days(d0) - days(d1));
 	}
+	constexpr years operator-(const ymd& d0, const ymd& d1)
+	{
+		return minus_years(d0, d1);
+	}
+
 #ifdef _DEBUG
 	constexpr int basic_date_test()
 	{
@@ -38,20 +45,39 @@ namespace fms::date {
 			static_assert(d1 + dd == d0);
 			static_assert(d0 - dd == d1);
 		}
+		{
+			constexpr auto d0 = make_days(2023, 4, 5);
+			constexpr auto d1 = make_days(2024, 4, 6);
+			constexpr auto dd = minus_years(d0, d1);
+			static_assert(d1 + dd == d0);
+			static_assert(d0 - dd == d1);
+		}
+		{
+			constexpr auto d0 = make_days(2023, 4, 5);
+			constexpr auto d1 = make_days(2024, 7, 6);
+			constexpr auto dd = minus_years(d0, d1);
+			static_assert(d1 + dd == d0);
+			static_assert(d0 - dd == d1);
+		}
 
 		return 0;
 	}
 #endif // _DEBUG
-	
-	// Day count fraction in years from d0 to d1.
-	constexpr years dcf_years(const ymd& d0, const ymd& d1)
-	{
-		return minus_years(d1, d0);
-	}
-	// dcf_30_360, ...
 
-	
-	namespace holiday {
+	// Day count fraction appoximately equal to time in year between dates.
+	using dcf_ = years(*)(const ymd&, const ymd&);
+	namespace dcf {
+		// Day count fraction in years from d0 to d1.
+		constexpr years _years(const ymd& d0, const ymd& d1)
+		{
+			return minus_years(d1, d0);
+		}
+		// _30_360, ...
+	}
+
+	// Return true if date is a holiday.
+	using holiday = bool(*)(const ymd&);
+	namespace holidays {
 
 		// Every year holiday on month and day
 		constexpr bool month_day(const ymd& d, const std::chrono::month& month, const std::chrono::day& day)
@@ -73,8 +99,22 @@ namespace fms::date {
 
 	} // namespace holiday
 
+	// Return true on non-trading days.
+	using calendar = bool(*)(const ymd&);
 	namespace calendars {
 
+		constexpr bool any(const ymd& d, std::span<const calendar*> cs)
+		{
+			for (const auto c : cs) {
+				if ((*c)(d)) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		// Return true if weekend.
 		constexpr bool weekday(const ymd& d)
 		{
 				auto w = std::chrono::year_month_weekday(d);
@@ -84,12 +124,10 @@ namespace fms::date {
 		}
 		constexpr bool example(const ymd& d)
 		{
-			return weekday(d) or holiday::new_year_day(d);
+			return weekday(d) or holidays::new_year_day(d);
 		}
 
 	} // namespace calendars
-
-	using calendar = bool(*)(const ymd&);
 
 	// Business day rolling conventions.
 	enum class roll {
@@ -238,7 +276,7 @@ namespace fms::date {
 			constexpr auto dy = years(dt);
 			static_assert(0 != dy.count());
 			static_assert(1 == dt.count());
-			constexpr auto y0 = dcf_years(d0, d1);
+			constexpr auto y0 = dcf::_years(d0, d1);
 			static_assert(dy == y0);
 		}
 

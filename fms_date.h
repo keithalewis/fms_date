@@ -17,40 +17,28 @@ namespace fms::date {
 	{
 		return { d.year(), d.month(), d.day() };
 	}
-	constexpr ymd ymd_error = make_ymd(0, 0u, 0u);
 
 	// Construct sys_days time point from ymd.
-	using days = std::chrono::sys_days;
-	constexpr days make_days(int y, int m, int d)
+	using sys_days = std::chrono::sys_days;
+	constexpr sys_days make_days(int y, int m, int d)
 	{
 		// ymd has operator operator sys_days conversion
-		return days(make_ymd(y, m, d));
+		return sys_days(make_ymd(y, m, d));
 	}
 
 	// duration as double in years
 	using years = std::chrono::duration<double, std::chrono::years::period>;
 
-	// d0 - d1 in years. If t = d0 - d1 then d1 = d0 - t and d0 = d1 + t
+	// d0 - d1 in years to system clock precision.
+	// If dt = d0 - d1 then d1 = d0 - dt and d0 = d1 + dt.
 	constexpr years operator-(const ymd& d0, const ymd& d1)
 	{
-		return years(days(d0) - days(d1));
+		return years(sys_days(d0) - sys_days(d1));
 	}
 
 #ifdef _DEBUG
 	int basic_date_test()
 	{
-		{
-			constexpr auto de = make_ymd(0, 0, 0);
-			static_assert(de == ymd_error);
-			auto [ y,m,d ] = from_ymd(de);
-			/*
-			assert(0 == y);
-			assert(0u == m);
-			assert(0u == d);
-			ymd d2(y, m, d);
-			assert(d2 == de);
-			*/
-		}
 		{
 			constexpr auto d0 = make_days(2023, 4, 5);
 			constexpr auto d1 = make_days(2024, 4, 5);
@@ -78,127 +66,132 @@ namespace fms::date {
 #endif // _DEBUG
 
 	// Periodic times in [effective, termination] working backwards from termination in period steps.
-	template<class Clock = std::chrono::system_clock, 
-		class Duration = typename Clock::duration,
-		class time_point = std::chrono::time_point<Clock, Duration>>
 	class periodic {
-		time_point effective, termination;
-		Duration period;
+		ymd effective, termination;
+		int months;
+		ymd current;
 	public:
-		constexpr periodic(const time_point& effective, const time_point& termination, const Duration& period)
-			: effective{ effective }, termination{ termination }, period{ period }
-		{ }
+		// STL iterator
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = ymd;
+
+		constexpr periodic(ymd effective, ymd termination, int months, bool end = false)
+			: effective{ effective }, termination{ termination }, months{ months }, current{ termination }
+		{ 
+			if (end) {
+				operator++();
+			}
+			else if (valid()) {
+				reset();
+			}
+		}
 		constexpr periodic(const periodic&) = default;
 		constexpr periodic& operator=(const periodic&) = default;
 		constexpr ~periodic() = default;
 
 		constexpr bool operator==(const periodic&) const = default;
 
-		class iterable {
-			periodic<Clock, Duration> i;
-			time_point current;
-
-			constexpr void reset()
-			{
-				// don't reset end()
-				if (current <= i.termination) {
-					while (current - i.period > i.effective) {
-						current = current - i.period;
-					}
-				}
-			}
-		public:
-			// STL iterator
-			using iterator_category = std::forward_iterator_tag;
-			using value_type = ymd;
-
-			constexpr iterable(const periodic<Clock, Duration>& i, const time_point& current)
-				: i{ i }, current{ current }
-			{ }
-			// Work backward from termination.
-			constexpr iterable(const periodic<Clock, Duration>& i)
-				: iterable(i, i.termination)
-			{
-				if (valid()) {
-					reset();
-				}
-			}
-			constexpr iterable(const iterable&) = default;
-			constexpr iterable& operator=(const iterable&) = default;
-			constexpr ~iterable() = default;
- 
-			constexpr bool operator==(const iterable& i_) const = default;
-
-			// order and direction of period are compatible
-			constexpr bool valid() const
-			{
-				if (i.effective == i.termination) {
-					return i.period.count() == 0;
-				}
-
-				return (i.effective < i.termination) == (i.period.count() > 0);
-			}
-
-			constexpr auto begin() const
-			{
-				return iterable(i);
-			}
-			constexpr auto end() const
-			{
-				iterable(i, termination + period);
-			}
-
-			constexpr explicit operator bool() const
-			{
-				return current <= i.termination;
-			}
-			constexpr value_type operator*() const
-			{
-				return value_type{ floor<std::chrono::days>(current) };
-			}
-			constexpr iterable& operator++()
-			{
-				if (*this) {
-					current += i.period;
-				}
-
-				return *this;
-			}
-		};
-#ifdef _DEBUG
-		static int test()
+		// order and direction of period are compatible
+		constexpr bool valid() const
 		{
-			using year = std::chrono::year;
-			constexpr auto eff = year(2023) / 1 / 2;
-			constexpr auto ter = year(2025) / 1 / 2;
-			{
-				constexpr periodic<> p(days(eff), days(ter), std::chrono::years(1));
-				constexpr periodic::iterable pi(p);
-				static_assert(pi);
-				constexpr auto pi2{ pi };
-				static_assert(pi2 == pi);
-				constexpr auto pi3 = pi2;
-				static_assert(!(pi3 != pi2));
-				assert(eff == *pi3);
-
-				iterable pi_{ pi };
-				assert(pi_);
-				assert(eff == *pi_);
-				++pi_;
-				assert(pi_);
-				auto p2 = days(eff) + years(1);
-				//ymd p3(p2);
-				//assert(days(*pi_) == p2);
-				++pi_;
-				assert(ter == *pi_);
-				++pi_;
-				assert(!pi_);
+			if (effective == termination) {
+				return months == 0;
 			}
 
-			return 0;
+			return (effective < termination) == (months > 0);
 		}
-#endif // _DEBUG
+
+		constexpr auto begin() const
+		{
+			return periodic(effective, termination, months);
+		}
+		constexpr auto end() const
+		{
+			periodic(effective, termination, months, true);
+		}
+
+		constexpr explicit operator bool() const
+		{
+			return current <= termination;
+		}
+		constexpr value_type operator*() const
+		{
+			return current;
+		}
+		constexpr periodic& operator++()
+		{
+			if (*this) {
+				current += std::chrono::months(months);
+			}
+
+			return *this;
+		}
+	protected:
+		constexpr void reset()
+		{
+			while (current - std::chrono::months(months) >= effective) {
+				current -= std::chrono::months(months);
+			}
+		}
 	};
+#ifdef _DEBUG
+	static int periodic_test()
+	{
+		using year = std::chrono::year;
+		{
+			constexpr auto eff = make_ymd(2023, 1, 2);
+			constexpr auto ter = make_ymd(2025, 1, 2);
+			constexpr auto pi = periodic(eff, ter, 12);
+			static_assert(pi);
+			constexpr auto pi2{ pi };
+			static_assert(pi2 == pi);
+			constexpr auto pi3 = pi2;
+			static_assert(!(pi3 != pi2));
+			static_assert(eff == *pi3);
+		}
+		{
+			constexpr auto eff = make_ymd(2023, 1, 1);
+			constexpr auto ter = make_ymd(2025, 1, 2);
+			constexpr auto pi = periodic(eff, ter, 12);
+			static_assert(*pi == make_ymd(2023, 1, 2));
+		}
+		{
+			constexpr auto eff = make_ymd(2023, 1, 3);
+			constexpr auto ter = make_ymd(2025, 1, 2);
+			constexpr auto pi = periodic(eff, ter, 12);
+			static_assert(*pi == make_ymd(2024, 1, 2));
+		}
+		{
+			constexpr auto eff = make_ymd(2023, 1, 1);
+			constexpr auto ter = make_ymd(2025, 2, 1);
+			constexpr auto pi = periodic(eff, ter, 12);
+			static_assert(*pi == make_ymd(2023, 2, 1));
+		}
+		{
+			constexpr auto eff = make_ymd(2023, 3, 1);
+			constexpr auto ter = make_ymd(2025, 2, 1);
+			constexpr auto pi = periodic(eff, ter, 12);
+			static_assert(*pi == make_ymd(2024, 2, 1));
+		}
+		{
+			auto d0 = make_ymd(2023, 4, 5);
+			auto d1 = make_ymd(2025, 4, 5);
+			auto pi = periodic(d0, d1, 12);
+			ymd ps[3];
+			ps[0] = *pi;
+			assert(ps[0] == d0);
+			ps[1] = *++pi;
+			assert(ps[1] == d0 + std::chrono::years(1));
+			assert(ps[1] == d1 - std::chrono::years(1));
+			ps[2] = *++pi;
+			assert(ps[2] == d1);
+			++pi;
+			assert(!pi);
+		}
+
+		return 0;
+	}
+#endif // _DEBUG
 
 	// Day count fraction appoximately equal to time in year between dates.
 	using dcf_ = years(*)(const ymd&, const ymd&);
@@ -210,18 +203,58 @@ namespace fms::date {
 		}
 		constexpr years _30_360(const ymd& t0, const ymd& t1)
 		{
-			auto [y0, m0, d0] = from_ymd(t0);
-			auto [y1, m1, d1] = from_ymd(t1);
+			using std::chrono::day;
+			auto d0 = (t0.day() == day(31)) 
+				? day(30) 
+				: t0.day() ;
+			auto d1 = (t1.day() == day(31) and d0 > day(29)) 
+				? day(30) 
+				: t1.day();
 
-			if (d0 == std::chrono::day(31)) {
-				d0 = std::chrono::day(30);
-			}
-			if (d1 == std::chrono::day(31) and d0 > std::chrono::day(29)) {
-				d1 = std::chrono::day(30);
-			}
+			int dy = (int)t1.year() - (int)t0.year();
+			int dm = (unsigned)t1.month() - (unsigned)t0.month();
+			int dd = (unsigned)d1 - (unsigned)d0;
 
-			return (360 * (y1 - y0) + 30*(m1 - m0) + (d1 - d0))/360.;
+			return years(360 * dy + 30 * dm + dd)/360.;
 		}
+		constexpr years _actual_360(const ymd& t0, const ymd& t1)
+		{
+			return (sys_days(t1) - sys_days(t0)) / 360.;
+		}
+		constexpr years _actual_365(const ymd& t0, const ymd& t1)
+		{
+			return (sys_days(t1) - sys_days(t0)) / 365.;
+		}
+
+#ifdef _DEBUG
+		static int test()
+		{
+			using year = std::chrono::year;
+			{
+				constexpr auto t0 = year(2023) / 1 / 2;
+				constexpr auto t1 = year(2024) / 1 / 2;
+				constexpr auto y2 = dcf::_30_360(t0, t1);
+				static_assert(y2 == years(1));
+				constexpr auto y3 = dcf::_actual_360(t0, t1);
+				constexpr auto dd = sys_days(t1) - sys_days(t0);
+				static_assert(dd == std::chrono::days(365));
+				static_assert(y3 == years(dd / 360.));
+			}
+			{
+				constexpr auto t0 = year(2023) / 1 / 2;
+				constexpr auto t1 = year(2024) / 1 / 4;
+				constexpr auto y2 = dcf::_30_360(t0, t1);
+				constexpr auto y2_ = years(1 + 0/30. + 2/360.);
+				static_assert(y2 == y2_);
+				constexpr auto y3 = dcf::_actual_360(t0, t1);
+				constexpr auto dd = sys_days(t1) - sys_days(t0);
+				static_assert(dd == std::chrono::days(367));
+				static_assert(y3 == years(dd / 360.));
+			}
+
+			return 0;
+		}
+#endif // _DEBUG
 	}
 
 	// Return true if date is a holiday.
@@ -287,25 +320,25 @@ namespace fms::date {
 		case roll::none:
 			return date;
 		case roll::previous:
-			return adjust(days(date) - std::chrono::days(1), convention, cal);
+			return adjust(sys_days(date) - std::chrono::days(1), convention, cal);
 		case roll::following:
-			return adjust(days(date) + std::chrono::days(1), convention, cal);
+			return adjust(sys_days(date) + std::chrono::days(1), convention, cal);
 		case roll::modified_following:
 		{
-			const auto date_ = adjust(days(date), roll::following, cal);
+			const auto date_ = adjust(sys_days(date), roll::following, cal);
 			return date_.month() == date.month()
 				? date_
 				: adjust(date, roll::previous, cal);
 		}
 		case roll::modified_previous:
 		{
-			const auto date_ = adjust(days(date), roll::previous, cal);
+			const auto date_ = adjust(sys_days(date), roll::previous, cal);
 			return date_.month() == date.month()
 				? date_
 				: adjust(date, roll::following, cal);
 		}
 		default:
-			return ymd_error;
+			return ymd{};
 		}
 
 		return date;

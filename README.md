@@ -15,11 +15,27 @@ and
 [`std::chrono::duration`](https://en.cppreference.com/w/cpp/chrono/duration)
 so you should learn about those first. See ... for an introduction.
 
-Unlike `<chrono>`, this library provides many functions that take two time points and return a duration.
 We are
 ```C++
-using years = std::chrono::duration<double, std::chrono::years::period>;
+using fms::date::ymd = std::chrono::year_month_day;
 ```
+for calendar dates. This provides year and month increments but not days.
+The `ymd` class implmements `explicit operator std::chrono::sys_days() const` to
+convert to a `time_point` with a resolution of one day. This is a fairly
+expensive operation. The `<chrono>` library has no functions for
+converting the difference of time points to a duration. We provide
+```C++
+// duration as double in years
+	using years = std::chrono::duration<double, std::chrono::years::period>;
+
+	// d0 - d1 in years. If dt = d0 - d1 then d0 = d1 + dt and d1 = d0 - dt 
+	constexpr years operator-(const ymd& d0, const ymd& d1)
+	{
+		return years(sys_days(d0) - sys_days(d1));
+	}
+```
+
+
 It is the duration in years represented by a `double`.
 Functions with prefix `dcf_` compute day count fractions approximately equal to the duration in years.
 These use market conventions for computing coupon payments.

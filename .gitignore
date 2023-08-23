@@ -34,3 +34,5 @@
 /x64/Debug
 /build
 /x64/Release
+/Debug
+/Release

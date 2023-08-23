@@ -31,7 +31,7 @@ namespace fms::date {
 
 	// d0 - d1 in years to system clock precision.
 	// If dt = d0 - d1 then d1 = d0 - dt and d0 = d1 + dt.
-	constexpr years operator-(const ymd& d0, const ymd& d1)
+	constexpr years operator-(ymd d0, ymd d1)
 	{
 		return years(sys_days(d0) - sys_days(d1));
 	}
@@ -40,25 +40,26 @@ namespace fms::date {
 	int basic_date_test()
 	{
 		{
-			constexpr auto d0 = make_days(2023, 4, 5);
-			constexpr auto d1 = make_days(2024, 4, 5);
+			constexpr auto d0 = make_ymd(2023, 4, 5);
+			constexpr auto d1 = make_ymd(2024, 4, 5);
 			constexpr auto dd = d0 - d1;
-			static_assert(d1 + dd == d0);
-			static_assert(d0 - dd == d1);
+			static_assert(d1 - std::chrono::years(1) == d0);
+			static_assert(sys_days(d1) + dd == sys_days(d0));
+			static_assert(sys_days(d0) - dd == sys_days(d1));
 		}
 		{
-			constexpr auto d0 = make_days(2023, 4, 5);
-			constexpr auto d1 = make_days(2024, 4, 6);
+			constexpr auto d0 = make_ymd(2023, 4, 5);
+			constexpr auto d1 = make_ymd(2024, 6, 7);
 			constexpr auto dd = d0 - d1;
-			static_assert(d1 + dd == d0);
-			static_assert(d0 - dd == d1);
+			static_assert(sys_days(d1) + dd == sys_days(d0));
+			static_assert(sys_days(d0) - dd == sys_days(d1));
 		}
 		{
-			constexpr auto d0 = make_days(2023, 4, 5);
-			constexpr auto d1 = make_days(2024, 7, 6);
+			constexpr auto d0 = make_ymd(2023, 4, 5);
+			constexpr auto d1 = make_ymd(2024, 7, 6);
 			constexpr auto dd = d0 - d1;
-			static_assert(d1 + dd == d0);
-			static_assert(d0 - dd == d1);
+			static_assert(sys_days(d1) + dd == sys_days(d0));
+			static_assert(sys_days(d0) - dd == sys_days(d1));
 		}
 
 		return 0;
@@ -194,6 +195,7 @@ namespace fms::date {
 #endif // _DEBUG
 
 	// Day count fraction appoximately equal to time in year between dates.
+	// https://eagledocs.atlassian.net/wiki/spaces/Accounting2017/pages/439484565/Understand+Day+Count+Basis+Options
 	using dcf_ = years(*)(const ymd&, const ymd&);
 	namespace dcf {
 		// Day count fraction in years from d0 to d1.
@@ -201,6 +203,7 @@ namespace fms::date {
 		{
 			return d1 - d0;
 		}
+		// NASD
 		constexpr years _30_360(const ymd& t0, const ymd& t1)
 		{
 			using std::chrono::day;
@@ -217,18 +220,54 @@ namespace fms::date {
 
 			return years(360 * dy + 30 * dm + dd)/360.;
 		}
+		// ISMA
+		constexpr years _30E_360(const ymd& t0, const ymd& t1)
+		{
+			using std::chrono::day;
+			auto d0 = (t0.day() == day(31))
+				? day(30)
+				: t0.day();
+			auto d1 = (t1.day() == day(31))
+				? day(30)
+				: t1.day();
+
+			int dy = (int)t1.year() - (int)t0.year();
+			int dm = (unsigned)t1.month() - (unsigned)t0.month();
+			int dd = (unsigned)d1 - (unsigned)d0;
+
+			return years(360 * dy + 30 * dm + dd) / 360.;
+		}
 		constexpr years _actual_360(const ymd& t0, const ymd& t1)
 		{
-			return (sys_days(t1) - sys_days(t0)) / 360.;
+			return years((sys_days(t1) - sys_days(t0)).count() / 360.);
 		}
 		constexpr years _actual_365(const ymd& t0, const ymd& t1)
 		{
-			return (sys_days(t1) - sys_days(t0)) / 365.;
+			return years((sys_days(t1) - sys_days(t0)).count() / 365.);
 		}
 
 #ifdef _DEBUG
+#define DATE_DCF_TEST(X) \
+	X(make_ymd(2003, 12, 29), make_ymd(2004, 1, 31), 31, 32, 33) \
+	X(make_ymd(2003, 12, 30), make_ymd(2004, 1, 31), 30, 30, 32) \
+	X(make_ymd(2003, 12, 31), make_ymd(2004, 1, 31), 30, 30, 31) \
+	X(make_ymd(2004, 1, 1), make_ymd(2004, 1, 31), 29, 30, 30) \
+	X(make_ymd(2003, 12, 29), make_ymd(2004, 2, 1), 32, 32, 34) \
+	X(make_ymd(2003, 12, 30), make_ymd(2004, 2, 1), 31, 31, 33) \
+	X(make_ymd(2003, 12, 31), make_ymd(2004, 2, 1), 31, 31, 32) \
+	X(make_ymd(2004, 1, 1), make_ymd(2004, 2, 1), 30, 30, 31) \
+
 		static int test()
 		{
+#define TEST_DATE_DCF(d0, d1, a, b, c) static_assert(dcf::_30E_360(d0, d1) == years(a/360.));
+			DATE_DCF_TEST(TEST_DATE_DCF)
+#undef TEST_DATE_DCF
+#define TEST_DATE_DCF(d0, d1, a, b, c) static_assert(dcf::_30_360(d0, d1) == years(b/360.));
+			DATE_DCF_TEST(TEST_DATE_DCF)
+#undef TEST_DATE_DCF
+#define TEST_DATE_DCF(d0, d1, a, b, c) static_assert(dcf::_actual_360(d0, d1) == years(c/360.));
+				DATE_DCF_TEST(TEST_DATE_DCF)
+#undef TEST_DATE_DCF
 			using year = std::chrono::year;
 			{
 				constexpr auto t0 = year(2023) / 1 / 2;
@@ -238,7 +277,8 @@ namespace fms::date {
 				constexpr auto y3 = dcf::_actual_360(t0, t1);
 				constexpr auto dd = sys_days(t1) - sys_days(t0);
 				static_assert(dd == std::chrono::days(365));
-				static_assert(y3 == years(dd / 360.));
+				constexpr auto yy = years(dd.count() / 360.);
+				static_assert(y3 == yy);// years(dd.count() / 360.));
 			}
 			{
 				constexpr auto t0 = year(2023) / 1 / 2;
@@ -246,10 +286,11 @@ namespace fms::date {
 				constexpr auto y2 = dcf::_30_360(t0, t1);
 				constexpr auto y2_ = years(1 + 0/30. + 2/360.);
 				static_assert(y2 == y2_);
-				constexpr auto y3 = dcf::_actual_360(t0, t1);
+				constexpr auto y3 = dcf::_actual_365(t0, t1);
 				constexpr auto dd = sys_days(t1) - sys_days(t0);
 				static_assert(dd == std::chrono::days(367));
-				static_assert(y3 == years(dd / 360.));
+				constexpr auto yy = years(dd.count() / 365.);
+				static_assert(y3 == yy);
 			}
 
 			return 0;
@@ -261,7 +302,7 @@ namespace fms::date {
 	using holiday = bool(*)(const ymd&);
 	namespace holidays {
 
-		// Every year holiday on month and day
+		// Yearly holiday on month and day
 		constexpr bool month_day(const ymd& d, const std::chrono::month& month, const std::chrono::day& day)
 		{
 			return (d.month() == month) and (d.day() == day);
@@ -352,7 +393,7 @@ namespace fms::date {
 	};
 	constexpr auto tenor(frequency f)
 	{
-		return std::chrono::months(12 / (int)f);
+		return 12 / (int)f;
 	}
 
 #ifdef _DEBUG

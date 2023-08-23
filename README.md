@@ -35,11 +35,8 @@ converting the difference of time points to a duration. We provide
 	}
 ```
 
-
-It is the duration in years represented by a `double`.
 Functions with prefix `dcf_` compute day count fractions approximately equal to the duration in years.
 These use market conventions for computing coupon payments.
-Many of these are based on `minus_years` that subtracts time points.
 
 Periodic events depend on an _effective_ and _termination_ pair of time points,
 and a duration called the _period_. Note temination might
